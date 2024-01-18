@@ -32,6 +32,7 @@ def run_eval(
     max_gpu_memory,
     dtype,
     revision,
+    debug,
 ):
     questions = load_questions(question_file, question_begin, question_end)
     # random shuffle the questions to balance the loading
@@ -63,6 +64,7 @@ def run_eval(
                 max_gpu_memory,
                 dtype=dtype,
                 revision=revision,
+                debug=debug,
             )
         )
 
@@ -82,11 +84,14 @@ def get_model_answers(
     max_gpu_memory,
     dtype,
     revision,
+    debug,
 ):
     model, tokenizer = load_model(
         model_path,
         revision=revision,
+        # NOTE: change here
         device="cuda",
+        # device="cpu",
         num_gpus=num_gpus_per_model,
         max_gpu_memory=max_gpu_memory,
         dtype=dtype,
@@ -96,6 +101,8 @@ def get_model_answers(
     )
 
     for question in tqdm(questions):
+        if debug:
+            print(f'Answering questions id: {question["question_id"]}')
         if question["category"] in temperature_config:
             temperature = temperature_config[question["category"]]
         else:
@@ -104,6 +111,8 @@ def get_model_answers(
         choices = []
         for i in range(num_choices):
             torch.manual_seed(i)
+            if debug:
+                print(f"DEBUG: fetching conv template for: {model_id}")
             conv = get_conversation_template(model_id)
             turns = []
             for j in range(len(question["turns"])):
@@ -112,6 +121,12 @@ def get_model_answers(
                 conv.append_message(conv.roles[1], None)
                 prompt = conv.get_prompt()
                 input_ids = tokenizer([prompt]).input_ids
+                # Added debug mode
+                if debug:
+                    print(f"DEBUG: prompt = {prompt}")
+                    print(
+                        f"DEBUG: len input_ids = {len(input_ids)};  input_ids[0] = {len(input_ids[0])}"
+                    )
 
                 if temperature < 1e-4:
                     do_sample = False
@@ -121,7 +136,9 @@ def get_model_answers(
                 # some models may error out when generating long outputs
                 try:
                     output_ids = model.generate(
+                        # NOTE: change here
                         torch.as_tensor(input_ids).cuda(),
+                        # torch.as_tensor(input_ids).cpu(),
                         do_sample=do_sample,
                         temperature=temperature,
                         max_new_tokens=max_new_token,
@@ -168,9 +185,20 @@ def get_model_answers(
 
                     if conv.name == "xgen" and output.startswith("Assistant:"):
                         output = output.replace("Assistant:", "", 1).strip()
+
                 except RuntimeError as e:
-                    print("ERROR question ID: ", question["question_id"])
-                    output = "ERROR"
+                    print(
+                        "ERROR (RuntimeError) question ID:",
+                        question["question_id"],
+                    )
+                    output = "RuntimeError"
+                except AssertionError as ae:
+                    # NOTE: Assert error for context length issue
+                    print(
+                        "ERROR (AssertionError) question ID:",
+                        question["question_id"],
+                    )
+                    output = "AssertionError"
 
                 conv.update_last_message(output)
                 turns.append(output)
@@ -213,7 +241,10 @@ if __name__ == "__main__":
         help="The path to the weights. This can be a local folder or a Hugging Face repo ID.",
     )
     parser.add_argument(
-        "--model-id", type=str, required=True, help="A custom name for the model."
+        "--model-id",
+        type=str,
+        required=True,
+        help="A custom name for the model.",
     )
     parser.add_argument(
         "--bench-name",
@@ -227,9 +258,13 @@ if __name__ == "__main__":
         help="A debug option. The begin index of questions.",
     )
     parser.add_argument(
-        "--question-end", type=int, help="A debug option. The end index of questions."
+        "--question-end",
+        type=int,
+        help="A debug option. The end index of questions.",
     )
-    parser.add_argument("--answer-file", type=str, help="The output answer file.")
+    parser.add_argument(
+        "--answer-file", type=str, help="The output answer file."
+    )
     parser.add_argument(
         "--max-new-token",
         type=int,
@@ -249,7 +284,10 @@ if __name__ == "__main__":
         help="The number of GPUs per model.",
     )
     parser.add_argument(
-        "--num-gpus-total", type=int, default=1, help="The total number of GPUs."
+        "--num-gpus-total",
+        type=int,
+        default=1,
+        help="The total number of GPUs.",
     )
     parser.add_argument(
         "--max-gpu-memory",
@@ -269,6 +307,13 @@ if __name__ == "__main__":
         default="main",
         help="The model revision to load.",
     )
+    # NOTE: added debug mode
+    parser.add_argument(
+        "--debug",
+        type=bool,
+        default=False,
+        help="Additional argument to toggle debug mode",
+    )
 
     args = parser.parse_args()
 
@@ -281,7 +326,9 @@ if __name__ == "__main__":
     if args.answer_file:
         answer_file = args.answer_file
     else:
-        answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
+        answer_file = (
+            f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
+        )
 
     print(f"Output to {answer_file}")
 
@@ -299,6 +346,7 @@ if __name__ == "__main__":
         max_gpu_memory=args.max_gpu_memory,
         dtype=str_to_torch_dtype(args.dtype),
         revision=args.revision,
+        debug=args.debug,
     )
 
     reorg_answer_file(answer_file)

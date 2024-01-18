@@ -28,7 +28,9 @@ from transformers import (
 from fastchat.constants import CPU_ISA
 from fastchat.conversation import Conversation, get_conv_template
 from fastchat.model.compression import load_compress_model
-from fastchat.model.llama_condense_monkey_patch import replace_llama_with_condense
+from fastchat.model.llama_condense_monkey_patch import (
+    replace_llama_with_condense,
+)
 from fastchat.model.model_chatglm import generate_stream_chatglm
 from fastchat.model.model_codet5p import generate_stream_codet5p
 from fastchat.model.model_falcon import generate_stream_falcon
@@ -78,7 +80,10 @@ class BaseModelAdapter:
             )
         except TypeError:
             tokenizer = AutoTokenizer.from_pretrained(
-                model_path, use_fast=False, revision=revision, trust_remote_code=True
+                model_path,
+                use_fast=False,
+                revision=revision,
+                trust_remote_code=True,
             )
         try:
             model = AutoModelForCausalLM.from_pretrained(
@@ -96,7 +101,9 @@ class BaseModelAdapter:
             )
         return model, tokenizer
 
-    def load_compress_model(self, model_path, device, torch_dtype, revision="main"):
+    def load_compress_model(
+        self, model_path, device, torch_dtype, revision="main"
+    ):
         return load_compress_model(
             model_path,
             device,
@@ -126,7 +133,10 @@ def get_model_adapter(model_path: str) -> BaseModelAdapter:
 
     # Try the basename of model_path at first
     for adapter in model_adapters:
-        if adapter.match(model_path_basename) and type(adapter) != BaseModelAdapter:
+        if (
+            adapter.match(model_path_basename)
+            and type(adapter) != BaseModelAdapter
+        ):
             return adapter
 
     # Then try the full path
@@ -185,8 +195,10 @@ def load_model(
     adapter = get_model_adapter(model_path)
 
     # Handle device mapping
-    cpu_offloading = raise_warning_for_incompatible_cpu_offloading_configuration(
-        device, load_8bit, cpu_offloading
+    cpu_offloading = (
+        raise_warning_for_incompatible_cpu_offloading_configuration(
+            device, load_8bit, cpu_offloading
+        )
     )
     if device == "cpu":
         kwargs = {"torch_dtype": torch.float32}
@@ -213,7 +225,9 @@ def load_model(
                     for i in range(num_gpus)
                 }
             else:
-                kwargs["max_memory"] = {i: max_gpu_memory for i in range(num_gpus)}
+                kwargs["max_memory"] = {
+                    i: max_gpu_memory for i in range(num_gpus)
+                }
     elif device == "mps":
         kwargs = {"torch_dtype": torch.float16}
         import transformers
@@ -251,7 +265,8 @@ def load_model(
 
         if "max_memory" in kwargs:
             kwargs["max_memory"]["cpu"] = (
-                str(math.floor(psutil.virtual_memory().available / 2**20)) + "Mib"
+                str(math.floor(psutil.virtual_memory().available / 2**20))
+                + "Mib"
             )
         kwargs["quantization_config"] = BitsAndBytesConfig(
             load_in_8bit_fp32_cpu_offload=cpu_offloading
@@ -326,7 +341,9 @@ def load_model(
         try:
             from modelscope.hub.snapshot_download import snapshot_download
 
-            model_path = snapshot_download(model_id=model_path, revision=revision)
+            model_path = snapshot_download(
+                model_id=model_path, revision=revision
+            )
         except ImportError as e:
             warnings.warn(
                 "Use model from www.modelscope.cn need pip install modelscope"
@@ -343,7 +360,9 @@ def load_model(
     ):
         model = ipex.optimize(model, dtype=kwargs["torch_dtype"])
 
-    if (device == "cuda" and num_gpus == 1 and not cpu_offloading) or device in (
+    if (
+        device == "cuda" and num_gpus == 1 and not cpu_offloading
+    ) or device in (
         "mps",
         "xpu",
         "npu",
@@ -351,7 +370,9 @@ def load_model(
         model.to(device)
 
     if device == "xpu":
-        model = torch.xpu.optimize(model, dtype=kwargs["torch_dtype"], inplace=True)
+        model = torch.xpu.optimize(
+            model, dtype=kwargs["torch_dtype"], inplace=True
+        )
 
     if debug:
         print(model)
@@ -647,7 +668,9 @@ class PeftModelAdapter:
             )
         base_model_path = config.base_model_name_or_path
         base_adapter = get_model_adapter(base_model_path)
-        return base_adapter.get_default_conv_template(config.base_model_name_or_path)
+        return base_adapter.get_default_conv_template(
+            config.base_model_name_or_path
+        )
 
 
 class VicunaAdapter(BaseModelAdapter):
@@ -677,7 +700,10 @@ class VicunaAdapter(BaseModelAdapter):
         return get_conv_template("vicuna_v1.1")
 
     def raise_warning_for_old_weights(self, model):
-        if isinstance(model, LlamaForCausalLM) and model.model.vocab_size > 32000:
+        if (
+            isinstance(model, LlamaForCausalLM)
+            and model.model.vocab_size > 32000
+        ):
             warnings.warn(
                 "\nYou are probably using the old Vicuna-v0 model, "
                 "which will generate unexpected results with the "
@@ -881,7 +907,9 @@ class OasstPythiaAdapter(BaseModelAdapter):
         return get_conv_template("oasst_pythia")
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
-        model, tokenizer = super().load_model(model_path, from_pretrained_kwargs)
+        model, tokenizer = super().load_model(
+            model_path, from_pretrained_kwargs
+        )
         model.config.eos_token_id = tokenizer.eos_token_id
         model.config.pad_token_id = tokenizer.pad_token_id
         return model, tokenizer
@@ -923,7 +951,9 @@ class PythiaAdapter(BaseModelAdapter):
         return "pythia" in model_path.lower()
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
-        model, tokenizer = super().load_model(model_path, from_pretrained_kwargs)
+        model, tokenizer = super().load_model(
+            model_path, from_pretrained_kwargs
+        )
         model.config.eos_token_id = tokenizer.eos_token_id
         model.config.pad_token_id = tokenizer.pad_token_id
         return model, tokenizer
@@ -976,6 +1006,32 @@ class MPTAdapter(BaseModelAdapter):
                 "If this is not desired, inspect model configurations and names."
             )
             return get_conv_template("zero_shot")
+
+
+class SEALIONAdapter(BaseModelAdapter):
+    """The model adapter for SEALION series (aisingapore/sealion)"""
+
+    def match(self, model_path: str):
+        model_path = model_path.lower()
+        return "sealion" in model_path
+
+    def load_model(self, model_path: str, from_pretrained_kwargs: dict):
+        revision = from_pretrained_kwargs.get("revision", "main")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True,
+            **from_pretrained_kwargs,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_path, trust_remote_code=True, revision=revision
+        )
+        model.config.eos_token_id = tokenizer.eos_token_id
+        model.config.pad_token_id = tokenizer.pad_token_id
+        return model, tokenizer
+
+    def get_default_conv_template(self, model_path: str) -> Conversation:
+        return get_conv_template("sealion")
 
 
 class BaizeAdapter(BaseModelAdapter):
@@ -1312,7 +1368,9 @@ class FalconAdapter(BaseModelAdapter):
     """The model adapter for tiiuae/falcon-40b"""
 
     def match(self, model_path: str):
-        return "falcon" in model_path.lower() and "chat" not in model_path.lower()
+        return (
+            "falcon" in model_path.lower() and "chat" not in model_path.lower()
+        )
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
         revision = from_pretrained_kwargs.get("revision", "main")
@@ -1470,10 +1528,14 @@ class MistralAdapter(BaseModelAdapter):
     """The model adapter for Mistral AI models"""
 
     def match(self, model_path: str):
-        return "mistral" in model_path.lower() or "mixtral" in model_path.lower()
+        return (
+            "mistral" in model_path.lower() or "mixtral" in model_path.lower()
+        )
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
-        model, tokenizer = super().load_model(model_path, from_pretrained_kwargs)
+        model, tokenizer = super().load_model(
+            model_path, from_pretrained_kwargs
+        )
         model.config.eos_token_id = tokenizer.eos_token_id
         model.config.pad_token_id = tokenizer.pad_token_id
         return model, tokenizer
@@ -1489,7 +1551,9 @@ class Llama2Adapter(BaseModelAdapter):
         return "llama-2" in model_path.lower()
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
-        model, tokenizer = super().load_model(model_path, from_pretrained_kwargs)
+        model, tokenizer = super().load_model(
+            model_path, from_pretrained_kwargs
+        )
         model.config.eos_token_id = tokenizer.eos_token_id
         model.config.pad_token_id = tokenizer.pad_token_id
         return model, tokenizer
@@ -1558,7 +1622,9 @@ class DolphinAdapter(OpenOrcaAdapter):
     """Model adapter for ehartford/dolphin-2.2.1-mistral-7b"""
 
     def match(self, model_path: str):
-        return "dolphin" in model_path.lower() and "mistral" in model_path.lower()
+        return (
+            "dolphin" in model_path.lower() and "mistral" in model_path.lower()
+        )
 
     def get_default_conv_template(self, model_path: str) -> Conversation:
         return get_conv_template("dolphin-2.2.1-mistral-7b")
@@ -1572,7 +1638,10 @@ class Hermes2Adapter(BaseModelAdapter):
     def match(self, model_path: str):
         return any(
             model_str in model_path.lower()
-            for model_str in ["openhermes-2.5-mistral-7b", "openhermes-2-mistral-7b"]
+            for model_str in [
+                "openhermes-2.5-mistral-7b",
+                "openhermes-2-mistral-7b",
+            ]
         )
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
@@ -1638,7 +1707,9 @@ class QwenChatAdapter(BaseModelAdapter):
         elif option == "fp32":
             config.fp32 = True
         else:
-            print("Invalid option. Please choose one from 'bf16', 'fp16' and 'fp32'.")
+            print(
+                "Invalid option. Please choose one from 'bf16', 'fp16' and 'fp32'."
+            )
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
         from transformers.generation import GenerationConfig
@@ -1661,7 +1732,10 @@ class QwenChatAdapter(BaseModelAdapter):
             trust_remote_code=True,
             **from_pretrained_kwargs,
         ).eval()
-        if hasattr(model.config, "use_dynamic_ntk") and model.config.use_dynamic_ntk:
+        if (
+            hasattr(model.config, "use_dynamic_ntk")
+            and model.config.use_dynamic_ntk
+        ):
             model.config.max_sequence_length = 16384
         tokenizer = AutoTokenizer.from_pretrained(
             model_path, trust_remote_code=True, revision=revision
@@ -1866,7 +1940,8 @@ class OpenLLaMaOpenInstructAdapter(BaseModelAdapter):
 
     def match(self, model_path: str):
         return (
-            "open-llama" in model_path.lower() and "open-instruct" in model_path.lower()
+            "open-llama" in model_path.lower()
+            and "open-instruct" in model_path.lower()
         )
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
@@ -1896,7 +1971,9 @@ class CodeLlamaAdapter(BaseModelAdapter):
         return "codellama" in model_path.lower()
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
-        model, tokenizer = super().load_model(model_path, from_pretrained_kwargs)
+        model, tokenizer = super().load_model(
+            model_path, from_pretrained_kwargs
+        )
         model.config.eos_token_id = tokenizer.eos_token_id
         model.config.pad_token_id = tokenizer.pad_token_id
         return model, tokenizer
@@ -1912,7 +1989,9 @@ class StableVicunaAdapter(BaseModelAdapter):
         return "stable-vicuna" in model_path.lower()
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
-        model, tokenizer = super().load_model(model_path, from_pretrained_kwargs)
+        model, tokenizer = super().load_model(
+            model_path, from_pretrained_kwargs
+        )
         model.config.eos_token_id = tokenizer.eos_token_id
         model.config.pad_token_id = tokenizer.pad_token_id
         return model, tokenizer
@@ -2067,7 +2146,10 @@ class DeepseekChatAdapter(BaseModelAdapter):
     # Note: that this model will require tokenizer version >= 0.13.3 because the tokenizer class is LlamaTokenizerFast
 
     def match(self, model_path: str):
-        return "deepseek-llm" in model_path.lower() and "chat" in model_path.lower()
+        return (
+            "deepseek-llm" in model_path.lower()
+            and "chat" in model_path.lower()
+        )
 
     def get_default_conv_template(self, model_path: str) -> Conversation:
         return get_conv_template("deepseek-chat")
@@ -2097,7 +2179,9 @@ class SolarAdapter(BaseModelAdapter):
     """The model adapter for upstage/SOLAR-10.7B-Instruct-v1.0"""
 
     def match(self, model_path: str):
-        return "solar-" in model_path.lower() and "instruct" in model_path.lower()
+        return (
+            "solar-" in model_path.lower() and "instruct" in model_path.lower()
+        )
 
     def get_default_conv_template(self, model_path: str) -> Conversation:
         return get_conv_template("solar")
@@ -2131,6 +2215,7 @@ register_model_adapter(ChatGPTAdapter)
 register_model_adapter(AzureOpenAIAdapter)
 register_model_adapter(ClaudeAdapter)
 register_model_adapter(MPTAdapter)
+register_model_adapter(SEALIONAdapter)
 register_model_adapter(BiLLaAdapter)
 register_model_adapter(RedPajamaINCITEAdapter)
 register_model_adapter(H2OGPTAdapter)

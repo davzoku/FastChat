@@ -60,7 +60,9 @@ class Conversation:
 
     def get_prompt(self) -> str:
         """Get the prompt for generation."""
-        system_prompt = self.system_template.format(system_message=self.system_message)
+        system_prompt = self.system_template.format(
+            system_message=self.system_message
+        )
         if self.sep_style == SeparatorStyle.ADD_COLON_SINGLE:
             ret = system_prompt + self.sep
             for role, message in self.messages:
@@ -748,6 +750,19 @@ register_conv_template(
     )
 )
 
+# sealion7b-instruct-nc default template
+# source: https://huggingface.co/aisingapore/sealion7b-instruct-nc/blob/main/config.json
+# source: https://huggingface.co/aisingapore/sealion7b-instruct-nc/discussions/3
+register_conv_template(
+    Conversation(
+        name="sealion",
+        roles=("USER", "RESPONSE"),
+        sep_style=SeparatorStyle.ADD_COLON_SINGLE,
+        sep="\n### ",
+        stop_token_ids=[1],
+    )
+)
+
 # Lemur-70b-chat default template
 # reference: https://huggingface.co/OpenLemur/lemur-70b-chat-v1#generation
 register_conv_template(
@@ -1423,7 +1438,9 @@ if __name__ == "__main__":
 
     print("-- Llama-2 template --")
     conv = get_conv_template("llama-2")
-    conv.set_system_message("You are a helpful, respectful and honest assistant.")
+    conv.set_system_message(
+        "You are a helpful, respectful and honest assistant."
+    )
     conv.append_message(conv.roles[0], "Hello!")
     conv.append_message(conv.roles[1], "Hi!")
     conv.append_message(conv.roles[0], "How are you?")
